@@ -1,165 +1,90 @@
-# SICK TiM240-2050300 LiDAR Control Panel
+# TiM240 LiDAR Perception Pipeline
 
-A production-ready Python application for real-time object detection, length measurement, and height monitoring using the SICK TiM240-2050300 2D LiDAR.
+An advanced edge-processing pipeline designed specifically for the SICK TiM240 2D LiDAR scanner. Built in Python, this system acquires high-frequency raw polar coordinate data via the `sick_scan_xd` driver layer (using the SICK CoLa-B protocol), maps it into Cartesian space, and applies continuous background subtraction and density-based spatial clustering (DBSCAN) to identify and measure discrete physical objects in real-time.
 
-## 🚀 Key Features
-- **Real-time Processing**: Full 14.5 Hz scan loop with background processing.
-- **Object Detection**: DBSCAN clustering to isolate multiple objects in the field of view.
-- **Dual-Axis Measurement**: Precise length (Bounding Box, Hull, or PCA) and height-above-baseline detection.
-- **Baseline Wizard**: Intelligent multi-scan floor calibration to filter sensor noise.
-- **Visual Dashboard**: High-performance PyQt5/Matplotlib interface.
-- **Industrial Alerts**: Threshold-based logic with local visual cues and direct Raspberry Pi GPIO buzzer support.
-- **Data Logging**: Automatic CSV recording of all measurements for audit and analysis.
-- **Robustness**: Background Watchdog thread for automatic LiDAR reconnection.
+## System Architecture & Domain Models
 
-## 🏗 Project Structure
-```
-gemlidar/
-├── config.yaml              # Global application settings
-├── src/
-│   ├── main.py              # Logic Orchestrator
-│   ├── gui_main.py          # Dashboard Entry Point
-│   ├── lidar/               # Driver & Communication
-│   ├── processing/          # Measurement & Clustering Brains
-│   ├── ui/                  # Dashboard & Control Panel
-│   ├── alerts/              # Thresholds & Physical Alert Outputs
-│   └── logging/             # CSV Data Recording
-└── tests/                   # Logic Validation Suite
-```
+At its core, this software operates as a streaming point cloud processor with several discrete stages:
 
-## 🛠 Setup Instructions
+*   **Acquisition (`TiM240Controller`)**: Manages the low-level socket connections and protocol exchanges with the SICK TiM240 hardware using `sick_scan_xd`. It automatically manages disconnections and watchdog timers.
+*   **Calibration (`BaselineCalibration`)**: Establishes a static environment baseline (floor profile). Supports automatic geometric calibration (using percentile-based floor estimation) and manual selection ranges.
+*   **Segmentation (`BackgroundSubtractor`)**: Dynamically partitions incoming point clouds into foreground and background structures by referencing the static environment baseline and analyzing range deltas.
+*   **Clustering (`ObjectDetector`)**: Consolidates foreground point clouds into discrete target objects via `scikit-learn`'s DBSCAN algorithm (`eps` and `min_samples` constraints configurable in `config.yaml`).
+*   **Measurement (`MeasurementEngine`)**: Evaluates geometric dimensions (bounding boxes, height, length) against thresholds mapped out in `measurement.thresholds`.
+*   **Hardware Actuation (`HardwareAlertClient`)**: Bridges the software state into physical reality, capable of sending state changes to GPIO (Raspberry Pi), Serial, or HTTP Webhooks (e.g., an ESP32 client).
 
-### 1. Prerequisites
-- **Ubuntu 20.04+** or **Raspberry Pi OS**
-- **Python 3.8+**
-- **sick_scan_xd** installed in one of these ways:
-  - `lidar.sdk_path` set in `config.yaml`
-  - `SICK_SCAN_XD_PATH` set in the environment
-  - default install at `~/sick_scan_xd`
-  - system install at `/opt/sick_scan_xd`
+## Prerequisites
 
-### 2. Install Dependencies
-Full install with GUI:
-```bash
-pip install -r requirements.txt
-```
+*   **Operating System**: Linux (Ubuntu 20.04/22.04 recommended)
+*   **Python Version**: 3.8+ 
+*   **Driver Layer**: [sick_scan_xd](https://github.com/SICKAG/sick_scan_xd) must be installed and compiled locally. The API bindings must be available either at `~/sick_scan_xd`, `/opt/sick_scan_xd`, or via the `SICK_SCAN_XD_PATH` environment variable.
+*   **Hardware Requirements**: SICK TiM240 connected via Ethernet (default IP: `192.168.2.111`).
+*   **Dependencies**: Defined in `requirements.txt`. Key libraries include `numpy`, `scikit-learn`, `PyQt5`, `matplotlib`, and `PyYAML`. 
 
-Raspberry Pi headless install:
-```bash
-pip install -r requirements-headless.txt
-```
+## Installation
 
-### 3. LiDAR Configuration
-Ensure your LiDAR is on the same network as your PC. Default IP is usually `192.168.2.111`.
-Update `config.yaml` or use the **Configuration Tab** in the UI.
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/Pras2005/lidar.git
+    cd lidar
+    ```
 
-If `sick_scan_xd` is not in a default location, also set:
-```yaml
-lidar:
-  sdk_path: /absolute/path/to/sick_scan_xd
-  launch_file: /absolute/path/to/sick_scan_xd/launch/sick_tim_240.launch
-```
+2.  **Install Python dependencies**:
+    ```bash
+    # For GUI execution
+    pip install -r requirements.txt 
+    
+    # For headless execution (e.g., on a Raspberry Pi without a display)
+    pip install -r requirements-headless.txt
+    ```
 
-Or set:
-```bash
-export SICK_SCAN_XD_PATH=/absolute/path/to/sick_scan_xd
-```
+3.  **Ensure `sick_scan_xd` Python API is available**:
+    If your `sick_scan_xd` installation is non-standard, export the path:
+    ```bash
+    export SICK_SCAN_XD_PATH=/path/to/your/sick_scan_xd
+    ```
 
-### 4. Running the Application
-**With Dashboard (Recommended):**
+## Usage
+
+The application can be run in two modes:
+
+### GUI Mode
+The graphical interface provides real-time visualization of the point cloud, detected objects, bounding boxes, and system states using a PyQt5/Matplotlib dashboard.
+
 ```bash
 python3 src/gui_main.py
 ```
 
-**Headless (CLI Only):**
+### Headless Mode
+For deployment on edge devices like the Raspberry Pi, run the core pipeline without the Qt5 overhead. It will rely purely on file logging and GPIO/HTTP alerts.
+
 ```bash
 python3 src/main.py
 ```
 
-## 📐 Measurement Logic
-- **Coordinate System**: Cartesian (X: Left/Right, Y: Distance from Sensor).
-- **Height**: Calculated as `Baseline_Y - Object_Min_Y`.
-- **Length**: Configurable in settings. 
-    - `bbox`: Axis-aligned box.
-    - `hull`: Longest segment across the convex hull (most accurate for irregular shapes).
-    - `pca`: Principal axis projection (best for elongated objects like planks).
+## Configuration
 
-## 📡 Hardware Alerts
-The application can trigger a physical buzzer, relay, or siren over Raspberry Pi GPIO, serial, or HTTP.
-1. Enable `alerts.output` in `config.yaml`.
-2. Choose `transport: gpio`, `transport: serial`, or `transport: http`.
-3. For `gpio`, set the Raspberry Pi BCM pin, active polarity, and buzz duration.
-4. For `serial`, set `serial_port` and `baudrate` for the Raspberry Pi UART or USB serial adapter.
-5. For `http`, set the target `ip` and `port`.
-6. The app sends an alert when a configured threshold with action `alert` is crossed.
+System behavior is driven entirely by `config.yaml`. Key sections include:
+*   `lidar`: Network parameters (IP, Port, Protocol).
+*   `scan`: Field of view and angular resolution constraints.
+*   `object_detection`: Tunables for the DBSCAN algorithm (`epsilon`, `min_samples`, `min_object_size`).
+*   `measurement`: Alert thresholds and measurement methods (e.g., bounding box height and length).
+*   `alerts`: Configuration for hardware triggers, including Raspberry Pi GPIO mapping.
 
-Example GPIO config:
-```yaml
-alerts:
-  output:
-    enabled: true
-    transport: "gpio"
-    gpio_pin: 18
-    gpio_active_high: true
-    gpio_duration_s: 0.3
-    cooldown_s: 0.5
+## Project Structure
+
 ```
-
-Example serial config:
-```yaml
-alerts:
-  output:
-    enabled: true
-    transport: "serial"
-    serial_port: "/dev/serial0"
-    baudrate: 115200
-    cooldown_s: 0.5
+.
+├── config.yaml               # Centralized configuration mapping
+├── deploy/                   # Systemd service files for headless startup
+├── logs/                     # Auto-generated CSV measurement traces
+├── src/
+│   ├── main.py               # Headless entry point
+│   ├── gui_main.py           # PyQt5 dashboard entry point
+│   ├── lidar/                # Hardware communication and point definitions
+│   ├── processing/           # DBSCAN clustering and bounding box math
+│   ├── alerts/               # HTTP, Serial, and GPIO actuation bindings
+│   ├── app_logging/          # Asynchronous measurement persistence
+│   └── ui/                   # Real-time Matplotlib rendering canvas
+└── tests/                    # Pytest suite for the processing pipeline
 ```
-
-## 🍓 Raspberry Pi Deployment
-For a production Raspberry Pi install, use the headless runtime instead of the GUI after setup:
-```bash
-python3 src/main.py
-```
-
-Recommended workflow:
-1. Run the GUI once to set floor axis, thresholds, and capture an empty scene.
-2. Save the configuration.
-3. Run `src/main.py` on the Raspberry Pi for headless operation.
-4. Set `alerts.output.transport: gpio` and wire the buzzer to the configured BCM pin.
-5. Use the headless console for the same operational actions you had in the GUI:
-```text
-status
-capture-scene
-clear-scene
-auto-floor
-set measurement.length.method hull
-set alerts.output.transport gpio
-set alerts.output.gpio_pin 18
-save
-```
-
-You can also pre-apply headless overrides on startup:
-```bash
-python3 src/main.py \
-  --set runtime.headless=true \
-  --set alerts.output.transport=gpio \
-  --set alerts.output.gpio_pin=18 \
-  --set alerts.output.gpio_duration_s=0.4
-```
-
-Example `systemd` service:
-```ini
-See `deploy/gemlidar.service`.
-```
-
-## 🧪 Testing
-Run the automated logic validation suite:
-```bash
-python3 tests/test_processing.py
-```
-
----
-**Version**: 1.0.0  
-**Device**: SICK TiM240-2050300  
-**License**: Proprietary / Industrial Use
