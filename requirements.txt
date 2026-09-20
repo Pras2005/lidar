@@ -1,0 +1,8 @@
+numpy
+scipy
+scikit-learn
+pyyaml
+PyQt5
+matplotlib
+requests
+pyserial

@@ -1,0 +1,72 @@
+alerts:
+  output:
+    baudrate: 115200
+    cooldown_s: 0.5
+    enabled: false
+    gpio_active_high: true
+    gpio_duration_s: 0.3
+    gpio_pin: 18
+    ip: 127.0.0.1
+    port: 80
+    serial_port: /dev/serial0
+    serial_timeout: 0.5
+    transport: gpio
+baseline:
+  auto_recalibrate_interval: 3600
+  floor_axis: x
+  floor_percentile: 15.0
+  height_m: 0.0
+  mode: auto
+  selection_range: null
+display:
+  grid_spacing: 0.5
+  refresh_rate: 30
+lidar:
+  auto_reconnect: true
+  ip: 192.168.2.111
+  launch_file: null
+  port: 2111
+  protocol: cola_b
+  sdk_path: null
+  timeout_ms: 5000
+measurement:
+  height:
+    thresholds:
+    - action: log
+      color: '#FFA500'
+      level: 0.1
+      name: Warning
+    - action: alert
+      color: '#FF0000'
+      level: 0.2
+      name: Critical
+    units: m
+  length:
+    method: bbox
+    thresholds:
+    - action: log
+      color: '#FFA500'
+      level: 0.2
+      name: Length Warning
+    - action: alert
+      color: '#FF0000'
+      level: 0.4
+      name: Length Critical
+    units: m
+object_detection:
+  epsilon: 0.05
+  max_object_size: 5.0
+  min_object_size: 0.02
+  min_samples: 5
+runtime:
+  headless: false
+scan:
+  angle_end: 120
+  angle_start: -120
+  angular_resolution: 1.0
+  enable_intensity: true
+  scan_frequency: 14.5
+scene_reference:
+  auto_capture: false
+  distance_tolerance: 0.08
+  enabled: true

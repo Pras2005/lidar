@@ -1,0 +1,17 @@
+[Unit]
+Description=GemLiDAR Headless Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/gemlidar
+Environment=PYTHONUNBUFFERED=1
+Environment=SICK_SCAN_XD_PATH=/opt/sick_scan_xd
+ExecStart=/usr/bin/python3 /opt/gemlidar/src/main.py --no-console
+Restart=always
+RestartSec=3
+User=pi
+
+[Install]
+WantedBy=multi-user.target
